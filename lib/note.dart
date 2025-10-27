@@ -6,7 +6,7 @@ class Note {
   final bool done;
   final DateTime createdAt;
 
-  const Note ({
+  Note ({
     this.id,
     required this.text,
     this.done = false,

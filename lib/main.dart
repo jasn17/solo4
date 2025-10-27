@@ -1,122 +1,235 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'notes_model.dart';
+import 'note.dart';
+import 'prefs.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => NotesModel(),
+      child: const PocketNotesApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// Root app widget with Material 3 and a single home page.
+class PocketNotesApp extends StatelessWidget {
+  const PocketNotesApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Pocket Notes',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const NotesPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+/// Main page with input row + list of notes.
+/// Loads persistence in [initState] via the [NotesModel].
+class NotesPage extends StatefulWidget {
+  const NotesPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<NotesPage> createState() => _NotesPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _NotesPageState extends State<NotesPage> {
+  final _textCtrl = TextEditingController();
+  bool _greeted = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  void initState() {
+    super.initState();
+    // Load persisted data and preferences.
+    final model = context.read<NotesModel>();
+    model.loadOnStart().then((_) => _maybeShowFirstRun());
+  }
+
+  @override
+  void dispose() {
+    _textCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _maybeShowFirstRun() async {
+    if (_greeted) return;
+    final prefs = AppPrefs();
+    final shown = await prefs.getFirstRunShown();
+    if (!shown && mounted) {
+      _greeted = true;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Welcome 👋'),
+          content: const Text(
+            'Add a note, fully close the app, and reopen it to confirm your data persists.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
+      await prefs.setFirstRunShown(true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final model = context.watch<NotesModel>();
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Pocket Notes'),
+        actions: [
+          Row(
+            children: [
+              const Text('Show completed'),
+              Switch(
+                value: model.showCompleted,
+                onChanged: model.setShowCompleted,
+              ),
+              IconButton(
+                tooltip: 'Clear all',
+                icon: const Icon(Icons.delete_sweep),
+                onPressed: model.items.isEmpty
+                    ? null
+                    : () async {
+                  await model.clearAll();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('All notes cleared')),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Column(
+        children: [
+          _InputRow(
+            controller: _textCtrl,
+            onSubmit: (value) async {
+              await context.read<NotesModel>().add(value);
+              _textCtrl.clear();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Saved')),
+              );
+            },
+          ),
+          const Divider(height: 0),
+          Expanded(
+            child: model.items.isEmpty
+                ? const _EmptyState()
+                : _NotesList(notes: model.items),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Text input + add button row.
+class _InputRow extends StatelessWidget {
+  const _InputRow({
+    required this.controller,
+    required this.onSubmit,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              textInputAction: TextInputAction.done,
+              onSubmitted: onSubmit,
+              decoration: const InputDecoration(
+                hintText: 'Add a note…',
+                border: OutlineInputBorder(),
+              ),
             ),
-          ],
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: () => onSubmit(controller.text),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Message shown when there are no notes.
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Text(
+          'No notes yet — add one above.',
+          textAlign: TextAlign.center,
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+}
+
+/// Scrollable list of notes with checkbox toggles.
+class _NotesList extends StatelessWidget {
+  const _NotesList({required this.notes});
+
+  final List<Note> notes;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      itemCount: notes.length,
+      separatorBuilder: (_, __) => const Divider(height: 0),
+      itemBuilder: (context, index) {
+        final note = notes[index];
+        return ListTile(
+          title: Text(
+            note.text,
+            style: note.done
+                ? const TextStyle(
+              decoration: TextDecoration.lineThrough,
+              color: Colors.grey,
+            )
+                : null,
+          ),
+          subtitle: Text(
+            note.createdAt.toLocal().toString(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Checkbox(
+            value: note.done,
+            onChanged: (_) => context.read<NotesModel>().toggle(note),
+          ),
+        );
+      },
     );
   }
 }

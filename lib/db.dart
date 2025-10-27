@@ -2,24 +2,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
-import '../models/note.dart';
+import 'note.dart';
 
-/// Thin SQLite helper for CRUD on the `notes` table.
-///
-/// Responsibilities:
+/// SQLite helper to CRUD to/from 'notes' table.
 /// - Opening/creating the database
 /// - CRUD methods with small, defensive error handling
 /// - A minimal 'reset' in case of detected corruption
 class NotesDb {
   NotesDb._internal();
   static final NotesDb _instance = NotesDb._internal();
-
-  /// Singleton accessor.
   factory NotesDb() => _instance;
 
   Database? _db;
 
-  /// Lazily open and cache the database.
+  // Cache the DB
   Future<Database> get _database async {
     if (_db != null) return _db!;
     _db = await _open();
@@ -50,7 +46,7 @@ class NotesDb {
     );
   }
 
-  /// Fetch all notes ordered by most recent first.
+  /// GET operation
   Future<List<Note>> fetchAll() async {
     try {
       final db = await _database;
@@ -61,7 +57,7 @@ class NotesDb {
       return rows.map(Note.fromMap).toList();
     } on DatabaseException catch (e, st) {
       debugPrint('fetchAll(): database exception: $e\n$st');
-      // Attempt a soft recovery path on corruption-like errors.
+      // Reset path for corruption error
       await _reset();
       return <Note>[];
     } catch (e, st) {
@@ -89,13 +85,13 @@ class NotesDb {
     );
   }
 
-  /// Delete all rows (used by 'Clear all').
+  /// Delete Operation
   Future<void> deleteAll() async {
     final db = await _database;
     await db.delete('notes');
   }
 
-  /// Drop and recreate the table (used on corruption recovery).
+  /// Drop and recreate the table, corruption recovery
   Future<void> _reset() async {
     final db = await _database;
     await db.execute('DROP TABLE IF EXISTS notes');
